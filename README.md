@@ -1,1 +1,168 @@
-# meier_game
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Meier — Würfelspiel</title>
+<style>
+body{margin:0;font-family:Arial,sans-serif;background:linear-gradient(180deg,#1b3a3a 0%,#163232 100%);color:#fff;}
+.container{display:flex;flex-direction:column;align-items:center;padding:12px}
+.header{font-size:24px;font-weight:bold;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+.logo{width:40px;height:40px;background:#e3b23c;color:#3a2410;font-weight:bold;border-radius:6px;display:flex;align-items:center;justify-content:center}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.btn{padding:8px 12px;border:none;border-radius:6px;background:#e3b23c;color:#3a2410;font-weight:bold;font-size:14px;flex:1;min-width:80px;text-align:center}
+.dice-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:12px}
+.die{width:60px;height:60px;background:#fff;color:#111;font-weight:bold;font-size:24px;border-radius:8px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.5);touch-action: manipulation;transition:transform 0.4s ease}
+.die.held{outline:3px solid #e3b23c;transform:scale(1.05)}
+.info{margin-bottom:12px;text-align:center}
+.players{width:100%;margin-bottom:12px}
+.player{display:flex;justify-content:space-between;padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.1);margin-bottom:4px}
+.player.active{background:#e3b23c;color:#3a2410;font-weight:bold}
+.log{max-height:160px;overflow:auto;background:rgba(255,255,255,0.1);padding:6px;border-radius:6px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header"><div class="logo">M</div>Meier</div>
+  <div class="controls">
+    <select id="playerCount" class="btn">
+      <option>1</option>
+      <option selected>2</option>
+      <option>3</option>
+      <option>4</option>
+    </select>
+    <button id="newGame" class="btn">Neues Spiel</button>
+    <button id="rollBtn" class="btn">Würfeln</button>
+    <button id="endBtn" class="btn">Runde beenden</button>
+  </div>
+  <div class="dice-row" id="diceRow"></div>
+  <div class="info" id="rollInfo">Würfe: 0 • Summe: 0 • Bonus: 0</div>
+  <div class="players" id="playersList"></div>
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+const DICE = 6;
+let players = [], curPlayer = 0, rollsThisTurn = 0, dice = [];
+
+const el = id => document.getElementById(id);
+
+function startGame(n) {
+  players = Array.from({length:n}, (_,i)=>({name:`Spieler ${i+1}`, score:0}));
+  curPlayer = 0;
+  newTurn();
+  renderPlayers();
+  log(`Neues Spiel mit ${n} Spieler(n)`);
+}
+
+function newTurn() {
+  rollsThisTurn = 0;
+  dice = Array(DICE).fill().map(()=>({value:rand(), held:false}));
+  renderDice();
+  updateInfo();
+}
+
+function rand() { return Math.floor(Math.random()*6)+1; }
+
+function renderDice() {
+  const row = el('diceRow');
+  row.innerHTML = '';
+  dice.forEach((d,i)=>{
+    const div = document.createElement('div');
+    div.className = 'die' + (d.held ? ' held' : '');
+    div.textContent = d.value;
+
+    div.onclick = () => {
+      d.held = !d.held;
+      renderDice();
+      updateInfo();
+      log(`${players[curPlayer].name} ${d.held ? 'legte' : 'nahm'} Würfel ${d.value} ${d.held ? 'beiseite' : 'wieder auf'}`);
+    };
+
+    row.appendChild(div);
+  });
+}
+
+function rollDice() {
+  const free = dice.filter(d=>!d.held);
+  if (free.length === 0) {
+    alert('Alle Würfel sind beiseitegelegt');
+    return;
+  }
+  rollsThisTurn++;
+
+  free.forEach(d=>{
+    const dieDivs = [...el('diceRow').children];
+    const div = dieDivs[dice.indexOf(d)];
+    div.style.transform = 'rotateX(720deg) rotateY(720deg)';
+  });
+
+  setTimeout(()=>{
+    free.forEach(d=>d.value = rand());
+    renderDice();
+    updateInfo();
+    log(`${players[curPlayer].name} würfelte`);
+  }, 400);
+}
+
+function calcBonus() {
+  const counts = {};
+  dice.forEach(d => counts[d.value] = (counts[d.value] || 0) + 1);
+  let b = 0;
+  for (const v in counts) {
+    if (counts[v] >= 2) b += counts[v];
+  }
+  return b;
+}
+
+function calcScore() {
+  const values = dice.map(d => d.value).sort((a,b)=>a-b);
+  const isMeier = values.join(',') === '1,2,3,4,5,6';
+  if (isMeier) return 40 - rollsThisTurn;
+  return dice.reduce((a,d)=>a+d.value,0) - rollsThisTurn + calcBonus();
+}
+
+function updateInfo() {
+  el('rollInfo').textContent = `Würfe: ${rollsThisTurn} • Summe: ${dice.reduce((a,d)=>a+d.value,0)} • Bonus: ${calcBonus()}`;
+  renderPlayers();
+}
+
+function renderPlayers() {
+  const list = el('playersList');
+  list.innerHTML = '';
+  players.forEach((p,i)=>{
+    const div = document.createElement('div');
+    div.className = 'player' + (i === curPlayer ? ' active' : '');
+    div.innerHTML = `<div>${p.name}</div><div>${p.score}</div>`;
+    list.appendChild(div);
+  });
+}
+
+function endTurn() {
+  const s = calcScore();
+  players[curPlayer].score += s;
+  log(`${players[curPlayer].name} beendet Runde mit ${s} Punkten`);
+  curPlayer = (curPlayer + 1) % players.length;
+  newTurn();
+  renderPlayers();
+}
+
+function log(msg) {
+  const l = el('log');
+  const d = document.createElement('div');
+  d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  l.prepend(d);
+}
+
+el('rollBtn').onclick = rollDice;
+el('endBtn').onclick = endTurn;
+el('newGame').onclick = () => startGame(parseInt(el('playerCount').value));
+
+startGame(2);
+
+});
+</script>
+</body>
+</html>
